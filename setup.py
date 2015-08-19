@@ -9,7 +9,7 @@ setup (name = "uncompyle2",
        description = "Python byte-code to source-code converter",
        author = "Hartmut Goebel",
        author_email = "h.goebel@crazy-compilers.com",
-       url = "http://github.com/sysfrog/uncompyle",
+       url = "http://github.com/wibiti/uncompyle",
        packages=['uncompyle2'],
        scripts=['scripts/uncompyle2'],
       )
