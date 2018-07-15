@@ -307,10 +307,14 @@ class Scanner:
             elif op == JA:
                 target = self.get_target(offset)
                 if target < offset:
-                    if offset in self.stmts and code[offset+3] not in (END_FINALLY, POP_BLOCK) \
-                     and offset not in self.not_continue:
-                        opname = 'CONTINUE'
-                    else:
+                    opname = 'CONTINUE'
+                    if offset not in self.stmts:
+                        opname = 'JUMP_BACK'
+                    elif code[offset+3] in (END_FINALLY, POP_BLOCK):
+                        opname = 'JUMP_BACK'
+                    elif offset in self.not_continue:
+                        opname = 'JUMP_BACK'
+                    elif code[offset+3] not in (JA, JF) and code[self.prev[offset]] == JA:
                         opname = 'JUMP_BACK'
 
             elif op == LOAD_GLOBAL:
