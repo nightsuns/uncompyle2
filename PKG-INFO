@@ -5,6 +5,6 @@ Summary: Python byte-code to source-code converter
 Home-page: http://github.com/sysfrog/uncompyle
 Author: Hartmut Goebel
 Author-email: h.goebel@crazy-compilers.com
-License: GPLv3
+License: MIT
 Description: UNKNOWN
 Platform: UNKNOWN
