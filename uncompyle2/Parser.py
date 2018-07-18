@@ -276,6 +276,7 @@ class Parser(GenericASTBuilder):
         
         lastc_stmt ::= iflaststmt
         lastc_stmt ::= whileelselaststmt
+        lastc_stmt ::= while1elselaststmt
         lastc_stmt ::= forelselaststmt
         lastc_stmt ::= ifelsestmtr
         lastc_stmt ::= ifelsestmtc
@@ -294,6 +295,8 @@ class Parser(GenericASTBuilder):
         lastl_stmt ::= ifelsestmtl
         lastl_stmt ::= forelselaststmtl
         lastl_stmt ::= tryelsestmtl
+        lastl_stmt ::= whileelselaststmtl
+        lastl_stmt ::= while1elselaststmtl
         
         l_stmts_opt ::= l_stmts
         l_stmts_opt ::= passstmt
@@ -302,7 +305,9 @@ class Parser(GenericASTBuilder):
         suite_stmts ::= return_stmts
         suite_stmts ::= continue_stmts
         
-        suite_stmts_opt ::= suite_stmts
+        suite_stmts_opt ::= _stmts
+        suite_stmts_opt ::= return_stmts
+        suite_stmts_opt ::= continue_stmts
         suite_stmts_opt ::= passstmt
         
         else_suite ::= suite_stmts
@@ -496,7 +501,7 @@ class Parser(GenericASTBuilder):
         
 
 
-        tryfinallystmt ::= SETUP_FINALLY suite_stmts
+        tryfinallystmt ::= SETUP_FINALLY suite_stmts_opt
                 POP_BLOCK LOAD_CONST
                 COME_FROM suite_stmts_opt END_FINALLY
                 
@@ -518,11 +523,19 @@ class Parser(GenericASTBuilder):
                 return_stmts
                 POP_BLOCK COME_FROM
 
-        while1stmt ::= SETUP_LOOP l_stmts JUMP_BACK COME_FROM
-        while1stmt ::= SETUP_LOOP l_stmts JUMP_BACK POP_BLOCK COME_FROM
+        while1stmt ::= SETUP_LOOP l_stmts_opt JUMP_BACK COME_FROM
+        while1stmt ::= SETUP_LOOP l_stmts_opt JUMP_BACK POP_BLOCK COME_FROM
         while1stmt ::= SETUP_LOOP return_stmts COME_FROM
         while1stmt ::= SETUP_LOOP return_stmts POP_BLOCK COME_FROM
-        while1elsestmt ::= SETUP_LOOP l_stmts JUMP_BACK else_suite COME_FROM
+
+        while1elsestmt ::= SETUP_LOOP l_stmts_opt JUMP_BACK else_suite COME_FROM
+        while1elsestmt ::= SETUP_LOOP l_stmts_opt JUMP_BACK POP_BLOCK else_suite COME_FROM
+
+        while1elselaststmt ::= SETUP_LOOP l_stmts_opt JUMP_BACK else_suitec COME_FROM
+        while1elselaststmt ::= SETUP_LOOP l_stmts_opt JUMP_BACK POP_BLOCK else_suitec COME_FROM
+
+        while1elselaststmtl ::= SETUP_LOOP l_stmts_opt JUMP_BACK else_suitel COME_FROM
+        while1elselaststmtl ::= SETUP_LOOP l_stmts_opt JUMP_BACK POP_BLOCK else_suitel COME_FROM
 
         whileelsestmt ::= SETUP_LOOP testexpr
                 l_stmts_opt JUMP_BACK
@@ -533,6 +546,11 @@ class Parser(GenericASTBuilder):
                 l_stmts_opt JUMP_BACK
                 POP_BLOCK
                 else_suitec COME_FROM
+
+        whileelselaststmtl ::= SETUP_LOOP testexpr
+                l_stmts_opt JUMP_BACK
+                POP_BLOCK
+                else_suitel COME_FROM
 
         _for ::= GET_ITER FOR_ITER
         _for ::= LOAD_CONST FOR_LOOP
@@ -614,9 +632,10 @@ class Parser(GenericASTBuilder):
         unary_not ::= expr UNARY_NOT
         unary_convert ::= expr UNARY_CONVERT
 
-        binary_subscr ::= expr expr BINARY_SUBSCR
-        binary_subscr2 ::= expr expr DUP_TOPX_2 BINARY_SUBSCR
-
+        binary_subscr ::= expr expr binary_subscr_end
+        binary_subscr_end ::= BINARY_SUBSCR
+        binary_subscr_end ::= DUP_TOPX_2 BINARY_SUBSCR
+        
         load_attr ::= expr LOAD_ATTR
         get_iter ::= expr GET_ITER
         slice0 ::= expr SLICE+0
@@ -661,11 +680,17 @@ class Parser(GenericASTBuilder):
         ret_cond ::= expr POP_JUMP_IF_FALSE expr RETURN_END_IF ret_expr_or_cond
         ret_cond_not ::= expr POP_JUMP_IF_TRUE expr RETURN_END_IF ret_expr_or_cond
 
-        stmt ::= return_lambda
-        stmt ::= conditional_lambda
+        stmts ::= return_lambda
+        stmts ::= conditional_lambda
+        stmts ::= conditional_lambda_not
+        stmts ::= yield_lambda
         
-        return_lambda ::= ret_expr RETURN_VALUE LAMBDA_MARKER
-        conditional_lambda ::= expr POP_JUMP_IF_FALSE return_if_stmt return_stmt LAMBDA_MARKER 
+        return_lambda ::= assign_opt ret_expr RETURN_VALUE LAMBDA_MARKER
+        conditional_lambda ::= assign_opt expr POP_JUMP_IF_FALSE return_if_stmt return_stmt LAMBDA_MARKER 
+        conditional_lambda_not ::= assign_opt expr POP_JUMP_IF_TRUE return_if_stmt return_stmt LAMBDA_MARKER 
+        yield_lambda ::= assign_opt yield POP_TOP LOAD_CONST RETURN_VALUE LAMBDA_MARKER
+        assign_opt ::= assign
+        assign_opt ::=
 
         cmp ::= cmp_list
         cmp ::= compare
