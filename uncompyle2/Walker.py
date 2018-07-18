@@ -40,7 +40,7 @@
 
 import sys, re, cStringIO
 from types import ListType, TupleType, DictType, \
-     EllipsisType, IntType, CodeType
+     EllipsisType, IntType, CodeType, FloatType
 
 from spark import GenericASTTraversal
 import Parser
@@ -153,6 +153,7 @@ TABLE_DIRECT = {
 
     'IMPORT_FROM':	( '%{pattr}', ),
     'load_attr':	( '%c.%[1]{pattr}', 0),
+    'load_attr_w_parens':	( '(%c).%[1]{pattr}', 0),
     'LOAD_FAST':	( '%{pattr}', ),
     'LOAD_NAME':	( '%{pattr}', ),
     'LOAD_GLOBAL':	( '%{pattr}', ),
@@ -165,7 +166,6 @@ TABLE_DIRECT = {
     'DELETE_GLOBAL':	( '%|del %{pattr}\n', ),
     'delete_subscr':	( '%|del %c[%c]\n', 0, 1,),
     'binary_subscr':	( '%c[%p]', 0, (1,100)),
-    'binary_subscr2':	( '%c[%p]', 0, (1,100)),
     'store_subscr':	( '%c[%c]', 0, 1),
     'STORE_FAST':	( '%{pattr}', ),
     'STORE_NAME':	( '%{pattr}', ),
@@ -206,8 +206,10 @@ TABLE_DIRECT = {
     'ret_cond':     ( '%p if %p else %p', (2,27), (0,27), (4,27)),
     'conditionalnot':  ( '%p if not %p else %p', (2,27), (0,22), (4,27)),
     'ret_cond_not':  ( '%p if not %p else %p', (2,27), (0,22), (4,27)),
-    'conditional_lambda':  ( '(%c if %c else %c)', 2, 0, 3),
-    'return_lambda':    ('%c', 0),
+    'conditional_lambda':  ( '(%c if %c else %c)', 3, 1, 4),
+    'conditional_lambda_not':  ( '(%c if not %c else %c)', 3, 1, 4),
+    'return_lambda':    ('%c', 1),
+    'yield_lambda':    ('(%c)', 1),
     'compare':		( '%p %[-1]{pattr} %p', (0,19), (1,19) ),
     'cmp_list':		( '%p %p', (0,20), (1,19)),
     'cmp_list1':	( '%[3]{pattr} %p %p', (0,19), (-2,19)),
@@ -264,8 +266,10 @@ TABLE_DIRECT = {
     'whilestmt':	( '%|while %c:\n%+%c%-\n\n', 1, 2 ),
     'while1stmt':	( '%|while 1:\n%+%c%-\n\n', 1 ),
     'while1elsestmt':	( '%|while 1:\n%+%c%-%|else:\n%+%c%-\n\n', 1, 3 ),
+    'while1elsestmtl':	( '%|while 1:\n%+%c%-%|else:\n%+%c%-\n\n', 1, 3 ),
     'whileelsestmt':	( '%|while %c:\n%+%c%-%|else:\n%+%c%-\n\n', 1, 2, -2 ),
     'whileelselaststmt':	( '%|while %c:\n%+%c%-%|else:\n%+%c%-', 1, 2, -2 ),
+    'whileelselaststmtl':	( '%|while %c:\n%+%c%-%|else:\n%+%c%-', 1, 2, -2 ),
     'forstmt':		( '%|for %c in %c:\n%+%c%-\n\n', 3, 1, 4 ),
     'forelsestmt':	(
         '%|for %c in %c:\n%+%c%-%|else:\n%+%c%-\n\n', 3, 1, 4, -2),
@@ -333,7 +337,6 @@ PRECEDENCE = {
     
     'load_attr':            2,
     'binary_subscr':        2,
-    'binary_subscr2':       2,
     'slice0':               2,
     'slice1':               2,
     'slice2':               2,
@@ -675,6 +678,11 @@ class Walker(GenericASTTraversal, object):
         self.prec = p
         self.prune()
         
+    def n_load_attr(self, node):
+        if node[0] == 'expr' and node[0][0] == 'LOAD_CONST' and type(node[0][0].pattr) in (IntType, FloatType):
+            node.type = 'load_attr_w_parens'
+        self.default(node)
+        
     def n_ret_expr(self, node):
         if len(node) == 1 and node[0] == 'expr':
             self.n_expr(node[0])
@@ -695,19 +703,22 @@ class Walker(GenericASTTraversal, object):
         
     def n_LOAD_CONST(self, node):
         data = node.pattr; datatype = type(data)
-        if datatype is IntType and data == minint:
-            # convert to hex, since decimal representation
-            # would result in 'LOAD_CONST; UNARY_NEGATIVE'
-            # change:hG/2002-02-07: this was done for all negative integers
-            # todo: check whether this is necessary in Python 2.1
-            self.write( hex(data) )
-        elif datatype is EllipsisType:
-            self.write('...')
-        elif data is None:
+        if data is None:
             # LOAD_CONST 'None' only occurs, when None is
             # implicit eg. in 'return' w/o params
             # pass
             self.write('None')
+        elif datatype is FloatType:
+            if data != data:
+                self.write("float('nan')")
+            elif data == float('inf'):
+                self.write("float('inf')")
+            elif data == float('-inf'):
+                self.write("float('-inf')")
+            else:
+                self.write(repr(data))
+        elif datatype is EllipsisType:
+            self.write('...')
         else:
             self.write(repr(data))
         # LOAD_CONST is a terminal, so stop processing/recursing early
@@ -715,9 +726,13 @@ class Walker(GenericASTTraversal, object):
 
 
     def n_delete_subscr(self, node):
-        if node[-2][0] == 'build_list' and node[-2][0][-1].type.startswith('BUILD_TUPLE'):
-            if node[-2][0][-1] != 'BUILD_TUPLE_0':
-                node[-2][0].type = 'build_tuple2'
+        n = node[-2][0]
+        if n == 'build_list' and n[-1].type.startswith('BUILD_TUPLE'):
+            if n[-1] != 'BUILD_TUPLE_0':
+                n.type = 'build_tuple2'
+        elif n == 'LOAD_CONST' and type(n.pattr) == tuple and len(n.pattr) > 0:
+            node[-2][0] = AST('build_tuple2',
+                              [Token('LOAD_CONST', None, x) for x in n.pattr] + [None])
         self.default(node)        
 #        maybe_tuple = node[-2][-1]
 #        if maybe_tuple.type.startswith('BUILD_TUPLE'):
@@ -1106,7 +1121,12 @@ class Walker(GenericASTTraversal, object):
         if node[5][0] == 'unpack':
             node[5][0].type = 'unpack_w_parens'
         self.default(node)
-
+        
+    def n_withasstmt(self, node):
+        if node[2][0] == 'unpack':
+            node[2][0].type = 'unpack_w_parens'
+        self.default(node)
+        
     def engine(self, entry, startnode):
         #self.print_("-----")
         #self.print_(str(startnode.__dict__))
@@ -1229,37 +1249,38 @@ class Walker(GenericASTTraversal, object):
           ##elif op == 'BUILD_TUPLE':	TABLE_R[k] = ('(%C%,)',    (0,-1,', '))
 
     def get_tuple_parameter(self, ast, name):
-       """
-       If the name of the formal parameter starts with dot,
-       it's a tuple parameter, like this:
-       #          def MyFunc(xx, (a,b,c), yy):
-       #                  print a, b*2, c*42
-       In byte-code, the whole tuple is assigned to parameter '.1' and
-       then the tuple gets unpacked to 'a', 'b' and 'c'.
+        """
+        If the name of the formal parameter starts with dot,
+        it's a tuple parameter, like this:
+        #          def MyFunc(xx, (a,b,c), yy):
+        #                  print a, b*2, c*42
+        In byte-code, the whole tuple is assigned to parameter '.1' and
+        then the tuple gets unpacked to 'a', 'b' and 'c'.
 
-       Since identifiers starting with a dot are illegal in Python,
-       we can search for the byte-code equivalent to '(a,b,c) = .1'
-       """
+        Since identifiers starting with a dot are illegal in Python,
+        we can search for the byte-code equivalent to '(a,b,c) = .1'
+        """
 
-       assert ast == 'stmts'
-       for i in range(len(ast)):
-           # search for an assign-statement
-           assert ast[i][0] == 'stmt'
-           node = ast[i][0][0]
-           if node == 'assign' \
+        assert ast == 'stmts'
+        for i in range(len(ast)):
+            # search for an assign-statement
+            #           assert ast[i][0] == 'stmt'
+            node = ast[i][0][0]
+            if node == 'assign' \
               and node[0] == ASSIGN_TUPLE_PARAM(name):
-               # okay, this assigns '.n' to something
-               del ast[i]
-               # walk lhs; this
-               # returns a tuple of identifiers as used
-               # within the function definition
-               assert node[1] == 'designator'
-               # if lhs is not a UNPACK_TUPLE (or equiv.),
-               # add parenteses to make this a tuple
-               #if node[1][0] not in ('unpack', 'unpack_list'):
-               return '(' + self.traverse(node[1]) + ')'
-               #return self.traverse(node[1])
-       raise "Can't find tuple parameter" % name
+                # okay, this assigns '.n' to something
+                if ast[i][0] == 'stmt':
+                    del ast[i]
+                # walk lhs; this
+                # returns a tuple of identifiers as used
+                # within the function definition
+                assert node[1] == 'designator'
+                # if lhs is not a UNPACK_TUPLE (or equiv.),
+                # add parenteses to make this a tuple
+                #if node[1][0] not in ('unpack', 'unpack_list'):
+                return '(' + self.traverse(node[1]) + ')'
+                #return self.traverse(node[1])
+        raise "Can't find tuple parameter" % name
 
 
     def make_function(self, node, isLambda, nested=1):
