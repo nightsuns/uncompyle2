@@ -306,7 +306,7 @@ class Scanner:
                         customize[opname] = oparg
             elif op == JA:
                 target = self.get_target(offset)
-                if target < offset:
+                if target <= offset:
                     opname = 'CONTINUE'
                     if offset not in self.stmts:
                         opname = 'JUMP_BACK'
