@@ -561,7 +561,8 @@ class Walker(GenericASTTraversal, object):
             and len(docstring) >= 2
             and docstring[-1] != '\t'
             and (docstring[-1] != '"'
-                 or docstring[-2] == '\t')):
+                 or docstring[-2] == '\t')
+            and '"""' not in docstring):
             self.write('r') #raw string
             #restore backslashes unescaped since raw
             docstring = docstring.replace('\t', '\\')
