@@ -86,10 +86,11 @@ def uncompyle(version, co, out=None, showasm=0, showast=0, deob=0):
 
     # store final output stream for case of error
     __real_out = out or sys.stdout
+    print >>__real_out, '# *_*coding:utf-8'
     if co.co_filename:
         print >>__real_out, '#Embedded file name: %s' % co.co_filename
     scanner = Scanner.getscanner(version)
-    scanner.setShowAsm(showasm, out)
+    scanner.setShowAsm(showasm, sys.stdout)
     tokens, customize = scanner.disassemble(co, deob=deob)
 
     #  Build AST from disassembly.

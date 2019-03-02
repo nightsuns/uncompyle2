@@ -40,7 +40,7 @@
 
 import sys, re, cStringIO
 from types import ListType, TupleType, DictType, \
-     EllipsisType, IntType, CodeType, FloatType
+    EllipsisType, IntType, CodeType, FloatType, StringType
 
 from spark import GenericASTTraversal
 import Parser
@@ -720,6 +720,10 @@ class Walker(GenericASTTraversal, object):
                 self.write(repr(data))
         elif datatype is EllipsisType:
             self.write('...')
+        elif datatype is StringType:
+            data = data.decode("utf-8").encode("utf-8")
+            data = '\'' + data + '\''
+            self.write(data)
         else:
             self.write(repr(data))
         # LOAD_CONST is a terminal, so stop processing/recursing early
