@@ -701,7 +701,21 @@ class Walker(GenericASTTraversal, object):
         self.preorder(node[1])
         self.prec += 1
         self.prune()
-        
+
+    def repr_str(self, str1):
+        ret = "\'"
+        for c in str1:
+            if c == '\r' or c == '\n' or c == '\\' or c == '\'' or c == '\"' or c == "\t" or c == "\a" \
+                    or c == "\b" or c == "\e" or c == "\v" or c == "\f":
+                t = repr(c)
+
+                ret += "\\" + t.strip("\'\\")
+            else:
+                ret += c
+
+        ret += "\'"
+        return ret
+
     def n_LOAD_CONST(self, node):
         data = node.pattr; datatype = type(data)
         if data is None:
@@ -721,8 +735,7 @@ class Walker(GenericASTTraversal, object):
         elif datatype is EllipsisType:
             self.write('...')
         elif datatype is StringType:
-            data = data.decode("utf-8").encode("utf-8")
-            data = '\'' + data + '\''
+            data = self.repr_str(data)
             self.write(data)
         else:
             self.write(repr(data))
